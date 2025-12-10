@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>축일 알림 단톡방 도우미</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc;
+        }
+        .input-group {
+            @apply flex flex-col sm:flex-row gap-4;
+        }
+        /* Custom Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+            animation: fadeInScale 0.2s ease-out;
+        }
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div id="app" class="w-full max-w-2xl bg-white p-6 md:p-8 rounded-xl shadow-2xl transition-all duration-300">
+        <h1 class="text-3xl font-bold text-center text-indigo-700 mb-2 flex items-center justify-center">
+            <svg class="w-8 h-8 mr-2 text-yellow-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 11a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4-3a5 5 0 100-10 5 5 0 000 10zM2 14a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm16 0a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.385 5.385a1 1 0 011.415 0l.707.707a1 1 0 01-1.415 1.415l-.707-.707a1 1 0 010-1.415zM15.293 6.707a1 1 0 01-1.415 1.415l-.707-.707a1 1 0 011.415-1.415l.707.707zM10 18a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM6 10a1 1 0 110-2h1a1 1 0 110 2H6zm7 0a1 1 0 110-2h1a1 1 0 110 2h-1z"></path>
+            </svg>
+            축일 알림 도우미 (데이터 저장됨)
+        </h1>
+        <p class="text-center text-xs text-red-500 mb-4" id="user-info"></p>
+
+        <!-- 현재 날짜 표시 -->
+        <p id="current-date" class="text-center text-gray-500 mb-4 text-sm"></p>
+        
+        <!-- 알림 메시지 영역 -->
+        <div id="notification-area" class="min-h-[120px] flex flex-col justify-center items-center p-4 rounded-lg bg-gray-50 border border-gray-200 transition-all duration-500 mb-4">
+            <p id="status-message" class="text-lg font-semibold text-center text-gray-600">데이터를 불러오는 중...</p>
+        </div>
+
+        <!-- 복사 버튼 (축일이 있을 때만 표시) -->
+        <button id="copy-button" class="w-full px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-300 opacity-0 transform translate-y-2 pointer-events-none" style="display: none;" onclick="copyMessage()">
+            <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v.75"></path></svg>
+            단톡방 메시지 복사하기
+        </button>
+
+        <!-- 복사 완료 메시지 -->
+        <div id="copy-success" class="mt-4 text-center text-green-600 font-medium opacity-0 transition-opacity duration-300 hidden">
+            <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            메시지가 복사되었습니다!
+        </div>
+        
+        <!-- 축일 입력 폼 -->
+        <div class="mt-8 pt-4 border-t border-gray-200">
+            <h3 class="text-xl font-bold text-gray-700 mb-4">➕ 새로운 축일 등록</h3>
+            <form id="feast-form" onsubmit="event.preventDefault(); saveFeastDay()">
+                <div class="input-group mb-4">
+                    <div class="flex-1">
+                        <label for="feast-month" class="block text-sm font-medium text-gray-700 mb-1">월</label>
+                        <select id="feast-month" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2">
+                            <!-- 1월부터 12월까지 옵션 -->
+                            <script>
+                                for(let i = 1; i <= 12; i++) {
+                                    document.write(`<option value="${i}">${i}월</option>`);
+                                }
+                            </script>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label for="feast-day" class="block text-sm font-medium text-gray-700 mb-1">일</label>
+                        <select id="feast-day" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2">
+                            <!-- 1일부터 31일까지 옵션 -->
+                            <script>
+                                for(let i = 1; i <= 31; i++) {
+                                    document.write(`<option value="${i}">${i}일</option>`);
+                                }
+                            </script>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="feast-name" class="block text-sm font-medium text-gray-700 mb-1">축일 이름</label>
+                    <input type="text" id="feast-name" placeholder="예: 성 OOO 기념일" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2">
+                </div>
+                
+                <div class="mb-4">
+                    <label for="feast-message" class="block text-sm font-medium text-gray-700 mb-1">단톡방 메시지 내용</label>
+                    <textarea id="feast-message" rows="3" placeholder="예: 오늘은 성 OOO 기념일입니다. 은총 가득한 하루 보내세요! 🙏" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"></textarea>
+                </div>
+                
+                <button type="submit" id="save-button" class="w-full py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 disabled:bg-green-400">
+                    축일 저장하기
+                </button>
+            </form>
+            <p id="save-status" class="text-center mt-2 text-sm text-gray-500 hidden"></p>
+        </div>
+
+        <!-- 저장된 축일 목록 -->
+        <div class="mt-8 pt-4 border-t border-gray-200">
+            <h3 class="text-xl font-bold text-gray-700 mb-4">📝 내가 등록한 축일 목록</h3>
+            <ul id="custom-feast-list" class="space-y-2">
+                <!-- 사용자 지정 축일이 여기에 표시됩니다 -->
+            </ul>
+            <p id="no-custom-feasts" class="text-gray-500 text-center text-sm mt-4 hidden">등록된 축일이 없습니다.</p>
+        </div>
+        
+        <!-- 개발자 정보 footer -->
+        <div class="mt-10 pt-6 border-t border-gray-200 text-center">
+            <p class="text-sm text-gray-500 font-medium">개발자: 성산성당 정미진</p>
+        </div>
+
+    </div>
+    
+    <!-- 커스텀 모달 (Custom Modal) UI -->
+    <div id="custom-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h4 id="modal-title" class="text-xl font-bold text-gray-800 mb-3">알림</h4>
+            <p id="modal-message" class="text-gray-600 mb-6"></p>
+            <div id="modal-actions" class="flex justify-end space-x-3">
+                <!-- 버튼이 여기에 동적으로 추가됩니다 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase와 애플리케이션 로직 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 설정 및 변수
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // 전역 변수
+        let app, db, auth;
+        let userId = null;
+        let customFeastDays = []; // Firestore에서 불러온 축일 데이터를 저장할 배열
+        let isAuthReady = false;
+
+        // HTML 요소 선택
+        const notificationArea = document.getElementById('notification-area');
+        const statusMessage = document.getElementById('status-message');
+        const copyButton = document.getElementById('copy-button');
+        const copySuccess = document.getElementById('copy-success');
+        const currentDateElem = document.getElementById('current-date');
+        const saveButton = document.getElementById('save-button');
+        const saveStatus = document.getElementById('save-status');
+        const customFeastList = document.getElementById('custom-feast-list');
+        const noCustomFeasts = document.getElementById('no-custom-feasts');
+        const userInfoElem = document.getElementById('user-info');
+
+        // 모달 관련 요소
+        const customModal = document.getElementById('custom-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalActions = document.getElementById('modal-actions');
+        
+        // setLogLevel('Debug'); // 디버깅용: 콘솔에 Firebase 로그를 표시합니다.
+
+        /**
+         * Firebase를 초기화하고 사용자 인증을 처리합니다.
+         */
+        async function initializeFirebaseAndAuth() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 사용자 인증 상태 변경 리스너 설정
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        userInfoElem.textContent = `사용자 ID: ${userId} | 데이터는 이 ID에 저장됩니다.`;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                        // 인증 완료 후 리스너 설정 시작
+                        setupFeastDayListener();
+                    } else {
+                        // 인증 토큰이 있으면 로그인 시도, 없으면 익명 로그인
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase 초기화 또는 인증 오류:", error);
+                statusMessage.textContent = '데이터베이스 연결 실패. 콘솔을 확인하세요.';
+            }
+        }
+
+        /**
+         * 사용자 지정 축일을 저장하는 컬렉션 참조를 반환합니다.
+         */
+        function getFeastDayCollectionRef() {
+            if (!db || !userId) {
+                console.error("Database or User ID is not available.");
+                return null;
+            }
+            // 개인 데이터 경로: /artifacts/{appId}/users/{userId}/custom_feast_days
+            return collection(db, `artifacts/${appId}/users/${userId}/custom_feast_days`);
+        }
+
+        /**
+         * Firestore에 새로운 축일을 저장합니다.
+         */
+        window.saveFeastDay = async function() {
+            const month = parseInt(document.getElementById('feast-month').value);
+            const day = parseInt(document.getElementById('feast-day').value);
+            const name = document.getElementById('feast-name').value.trim();
+            const message = document.getElementById('feast-message').value.trim();
+
+            if (!month || !day || !name || !message) {
+                showCustomAlert('입력 오류', '모든 필드를 채워주세요.');
+                return;
+            }
+
+            const collectionRef = getFeastDayCollectionRef();
+            if (!collectionRef) return;
+
+            saveButton.disabled = true;
+            saveStatus.textContent = '저장 중...';
+            saveStatus.classList.remove('hidden');
+
+            try {
+                await addDoc(collectionRef, {
+                    month: month,
+                    day: day,
+                    name: name,
+                    message: message,
+                    createdAt: new Date()
+                });
+
+                document.getElementById('feast-form').reset();
+                saveStatus.textContent = '✅ 축일이 성공적으로 저장되었습니다!';
+                saveStatus.classList.remove('text-red-500');
+                saveStatus.classList.add('text-green-600');
+                setTimeout(() => saveStatus.classList.add('hidden'), 3000);
+
+            } catch (e) {
+                console.error("축일 저장 오류:", e);
+                saveStatus.textContent = '❌ 저장 실패: ' + e.message;
+                saveStatus.classList.remove('text-green-600');
+                saveStatus.classList.add('text-red-500');
+            } finally {
+                saveButton.disabled = false;
+            }
+        }
+        
+        /**
+         * 축일 목록을 실시간으로 불러오고 UI를 업데이트합니다.
+         */
+        function setupFeastDayListener() {
+            if (!isAuthReady || !userId) {
+                console.log("Waiting for auth to be ready...");
+                return;
+            }
+
+            const collectionRef = getFeastDayCollectionRef();
+            if (!collectionRef) return;
+
+            onSnapshot(collectionRef, (snapshot) => {
+                customFeastDays = [];
+                snapshot.forEach(doc => {
+                    customFeastDays.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Firestore에서 불러온 데이터로 축일 확인 및 목록 UI 업데이트
+                checkFeastDay();
+                renderFeastList();
+
+                console.log("Feast days updated:", customFeastDays.length);
+            }, (error) => {
+                console.error("Error setting up Firestore listener:", error);
+                statusMessage.textContent = '축일 목록을 불러오는 중 오류 발생.';
+            });
+        }
+        
+        /**
+         * 저장된 축일 목록을 UI에 표시합니다.
+         */
+        function renderFeastList() {
+            customFeastList.innerHTML = ''; // 기존 목록 초기화
+            
+            if (customFeastDays.length === 0) {
+                noCustomFeasts.classList.remove('hidden');
+                return;
+            }
+            
+            noCustomFeasts.classList.add('hidden');
+            
+            // 날짜 순으로 정렬
+            const sortedFeasts = [...customFeastDays].sort((a, b) => {
+                if (a.month !== b.month) return a.month - b.month;
+                return a.day - b.day;
+            });
+
+            sortedFeasts.forEach(feast => {
+                const listItem = document.createElement('li');
+                listItem.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200';
+                listItem.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-gray-800">${feast.month}월 ${feast.day}일: ${feast.name}</p>
+                        <p class="text-xs text-gray-500 truncate max-w-xs sm:max-w-md">${feast.message}</p>
+                    </div>
+                    <button class="text-red-500 hover:text-red-700 p-1 rounded-full transition-colors" onclick="handleDeleteFeastDay('${feast.id}')" title="삭제">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                customFeastList.appendChild(listItem);
+            });
+        }
+
+        /**
+         * 축일 문서를 Firestore에서 삭제합니다. (커스텀 confirm 사용)
+         */
+        window.handleDeleteFeastDay = function(docId) {
+            showCustomConfirm(
+                '축일 삭제 확인', 
+                '정말로 이 축일 항목을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.', 
+                async () => {
+                    const collectionRef = getFeastDayCollectionRef();
+                    if (!collectionRef) return;
+                    
+                    try {
+                        await deleteDoc(doc(collectionRef, docId));
+                        // onSnapshot 리스너가 목록을 자동으로 업데이트합니다.
+                        showCustomAlert('삭제 완료', '축일이 목록에서 제거되었습니다.');
+                    } catch (e) {
+                        console.error("축일 삭제 오류:", e);
+                        showCustomAlert('삭제 오류', '축일 삭제에 실패했습니다: ' + e.message);
+                    }
+                }
+            );
+        }
+
+        /**
+         * 현재 날짜를 확인하고 축일이 있는지 검사합니다. (Firestore 데이터 사용)
+         * 9시 이후라면 특별 알림을 띄웁니다.
+         */
+        function checkFeastDay() {
+            const today = new Date();
+            const month = today.getMonth() + 1; // getMonth()는 0부터 시작
+            const day = today.getDate();
+            const year = today.getFullYear();
+            const hour = today.getHours();
+
+            // 9시 (09:00) 이후인지 확인
+            const isAfterNineAM = hour >= 9;
+
+            // 현재 날짜를 한국어로 표시
+            currentDateElem.textContent = `${year}년 ${month}월 ${day}일 (${isAfterNineAM ? '오전 9시 이후' : '오전 9시 이전'})`;
+            
+            // 오늘 날짜와 일치하는 축일을 찾습니다.
+            const todayFeast = customFeastDays.find(f => f.month === month && f.day === day);
+
+            if (todayFeast) {
+                // 축일이 있는 경우
+                const chatMessage = `[오늘의 축일 알림]\n\n🔔 오늘은 ${todayFeast.name}입니다.\n\n${todayFeast.message}\n\n🙏 은총 가득한 하루 보내세요!`;
+
+                // 9시 이후에만 특별 알림 모달 표시
+                if (isAfterNineAM) {
+                    showCustomAlert(
+                        '✨ 단톡방 발송 시간입니다! ✨', 
+                        `오늘은 **${todayFeast.name}**입니다. 메시지를 복사하여 단톡방에 발송해 주세요.`,
+                        () => window.copyMessage()
+                    );
+                }
+
+
+                // 알림 영역 업데이트 (메시지 카드 스타일)
+                notificationArea.innerHTML = `
+                    <div class="w-full p-4 rounded-lg border-2 border-yellow-400 bg-yellow-50 shadow-lg">
+                        <p class="text-xl font-extrabold text-yellow-700 text-center mb-2">🎉 ${todayFeast.name} 🎉</p>
+                        <p class="text-gray-700 whitespace-pre-wrap text-center">${todayFeast.message}</p>
+                        ${isAfterNineAM ? '<p class="text-red-500 font-bold mt-2 text-sm">✅ 지금 바로 단톡방에 복사/발송하세요!</p>' : '<p class="text-indigo-500 font-medium mt-2 text-sm">🕘 오전 9시 이후에 다시 접속하시면 알림이 뜹니다.</p>'}
+                    </div>
+                    <textarea id="chat-message-box" class="hidden">${chatMessage}</textarea>
+                `;
+                
+                // 복사 버튼 표시 및 애니메이션
+                copyButton.style.display = 'block';
+                setTimeout(() => {
+                    copyButton.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+                }, 100);
+
+            } else {
+                // 축일이 없는 경우
+                notificationArea.innerHTML = `
+                    <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <p class="text-lg font-semibold text-center text-gray-600">오늘은 등록된 축일이 없습니다.</p>
+                    <p class="text-sm text-gray-500 mt-1">평화로운 하루 보내세요!</p>
+                `;
+                
+                // 복사 버튼 숨기기
+                copyButton.style.display = 'none';
+                copyButton.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+            }
+        }
+
+        /**
+         * 생성된 메시지를 클립보드에 복사합니다.
+         */
+        window.copyMessage = function() {
+            const messageBox = document.getElementById('chat-message-box');
+            if (!messageBox) return;
+
+            // 텍스트를 선택하고 복사 명령 실행 (iframe 환경에서 권장되는 방식)
+            messageBox.select();
+            document.execCommand('copy');
+            
+            // 복사 완료 메시지 표시
+            copySuccess.classList.remove('hidden');
+            copySuccess.classList.remove('opacity-0');
+
+            // 3초 후 메시지 숨기기
+            setTimeout(() => {
+                copySuccess.classList.add('opacity-0');
+                setTimeout(() => {
+                    copySuccess.classList.add('hidden');
+                }, 300);
+            }, 3000);
+        }
+
+        /**
+         * 사용자 지정 Alert 모달을 표시합니다.
+         * @param {string} title - 모달 제목
+         * @param {string} message - 모달 메시지 (HTML 포함 가능)
+         * @param {function} [onConfirm=null] - 확인 버튼 클릭 시 실행할 함수
+         */
+        function showCustomAlert(title, message, onConfirm = null) {
+            modalTitle.textContent = title;
+            modalMessage.innerHTML = message;
+            modalActions.innerHTML = '';
+
+            const okButton = document.createElement('button');
+            okButton.textContent = onConfirm ? '복사하고 확인' : '확인';
+            okButton.className = 'py-2 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors';
+            okButton.onclick = () => {
+                customModal.classList.add('hidden');
+                if (onConfirm) onConfirm();
+            };
+            modalActions.appendChild(okButton);
+            customModal.classList.remove('hidden');
+        }
+
+        /**
+         * 사용자 지정 Confirm 모달을 표시합니다.
+         * @param {string} title - 모달 제목
+         * @param {string} message - 모달 메시지
+         * @param {function} onConfirmed - '예' 버튼 클릭 시 실행할 함수
+         */
+        function showCustomConfirm(title, message, onConfirmed) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalActions.innerHTML = '';
+
+            // 취소 버튼
+            const cancelButton = document.createElement('button');
+            cancelButton.textContent = '취소';
+            cancelButton.className = 'py-2 px-4 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors';
+            cancelButton.onclick = () => customModal.classList.add('hidden');
+            modalActions.appendChild(cancelButton);
+
+            // 확인 버튼
+            const confirmButton = document.createElement('button');
+            confirmButton.textContent = '예, 삭제합니다';
+            confirmButton.className = 'py-2 px-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors';
+            confirmButton.onclick = () => {
+                customModal.classList.add('hidden');
+                onConfirmed();
+            };
+            modalActions.appendChild(confirmButton);
+
+            customModal.classList.remove('hidden');
+        }
+
+        // 앱 로드 시 Firebase 초기화 및 인증 시작
+        window.onload = initializeFirebaseAndAuth;
+
+    </script>
+</body>
+</html>
